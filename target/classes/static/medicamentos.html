@@ -1,0 +1,70 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Medicamentos | Medicontrol Web</title><link rel="stylesheet" href="css/styles.css"><style>
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;}
+.modal-overlay.active{display:flex;}
+.modal-box{background:white;border-radius:16px;padding:32px;max-width:380px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.2);}
+.modal-icon{font-size:48px;margin-bottom:12px;}
+.modal-title{font-size:18px;font-weight:700;color:#1a1a2e;margin-bottom:8px;}
+.modal-msg{font-size:14px;color:#667085;margin-bottom:24px;}
+.modal-btns{display:flex;gap:12px;justify-content:center;}
+.modal-btn-cancel{padding:10px 24px;border-radius:8px;border:1px solid #e0e0e0;background:white;color:#667085;font-weight:600;cursor:pointer;font-size:14px;}
+.modal-btn-confirm{padding:10px 24px;border-radius:8px;border:none;background:#e53e3e;color:white;font-weight:600;cursor:pointer;font-size:14px;}
+.modal-btn-cancel:hover{background:#f5f5f5;}
+.modal-btn-confirm:hover{background:#c53030;}
+</style></head><body>
+
+<div class="modal-overlay" id="modalEliminar">
+  <div class="modal-box">
+    <div class="modal-icon">🗑️</div>
+    <div class="modal-title">¿Eliminar medicamento?</div>
+    <div class="modal-msg">Esta acción no se puede deshacer. El medicamento y sus dosis serán eliminados.</div>
+    <div class="modal-btns">
+      <button class="modal-btn-cancel" onclick="cerrarModal()">Cancelar</button>
+      <button class="modal-btn-confirm" id="btnConfirmarEliminar">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">✚</div><h1>Medicontrol <span>Web</span></h1></div><nav class="nav"><a href="dashboard.html">Dashboard</a><a href="pacientes.html">Pacientes</a><a class="active" href="medicamentos.html">Medicamentos</a><a href="dosis.html">Dosis de hoy</a><a href="historial.html">Historial</a><a href="reportes.html">Reportes</a><a href="#" onclick="logout()">Cerrar sesión</a></nav></aside><main class="main"><div class="topbar"><div><h2>Medicamentos</h2><p>Programación de tratamientos, dosis y horarios.</p></div></div><section class="grid content-grid"><div class="card"><h3>Registrar medicamento</h3><form id="medicamentoForm" class="form-grid"><input type="hidden" id="medId"><div class="full"><label>Paciente</label><select id="pacienteId" required></select></div><div><label>Medicamento</label><input class="input" id="nombreMed" required></div><div><label>Dosis</label><input class="input" id="dosisMed" placeholder="Ej: 500 mg" required></div><div><label>Presentación</label><input class="input" id="presentacion" placeholder="Tableta, jarabe..."></div><div><label>Frecuencia</label><input class="input" id="frecuencia" placeholder="Diario, cada 8 horas..."></div><div><label>Hora de toma</label><input class="input" id="horaToma" type="time" required></div><div><label>Fecha inicio</label><input class="input" id="fechaInicio" type="date"></div><div><label>Fecha fin</label><input class="input" id="fechaFin" type="date"></div><div class="full"><label>Indicaciones</label><textarea id="indicaciones"></textarea></div><button class="btn btn-primary full" style="text-align:center !important;justify-content:center;">Guardar medicamento</button></form></div><div class="card"><div class="section-title"><h3>Listado</h3><button class="btn btn-sm btn-light" onclick="listarMedicamentos()">Actualizar</button></div><div class="table-wrap"><table><thead><tr><th>Paciente</th><th>Medicamento</th><th>Hora</th><th>Estado</th><th></th></tr></thead><tbody id="tablaMedicamentos"></tbody></table></div></div></section></main></div>
+
+<script src="js/app.js"></script><script>
+requireLogin();
+
+let _medIdEliminar = null;
+
+function cerrarModal(){
+  _medIdEliminar = null;
+  document.getElementById("modalEliminar").classList.remove("active");
+}
+
+document.getElementById("btnConfirmarEliminar").onclick = async function(){
+  if(!_medIdEliminar) return;
+  await api(`/medicamentos/${_medIdEliminar}`, {method:"DELETE"});
+  cerrarModal();
+  toast("Medicamento eliminado");
+  listarMedicamentos();
+};
+
+document.getElementById("modalEliminar").addEventListener("click", function(e){
+  if(e.target === this) cerrarModal();
+});
+
+// Sobreescribir listarMedicamentos para usar modal en vez de confirm
+async function listarMedicamentos(){
+  const meds = await api("/medicamentos");
+  tablaMedicamentos.innerHTML = meds.map(m => `
+    <tr>
+      <td>${pacienteNombre(m.paciente)}</td>
+      <td><strong>${m.nombre}</strong><br><small>${m.dosis} - ${m.frecuencia||""}</small></td>
+      <td>${m.horaToma}</td>
+      <td>${badge(m.estado)}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="confirmarEliminar(${m.id})">Eliminar</button></td>
+    </tr>`).join("");
+}
+
+function confirmarEliminar(id){
+  _medIdEliminar = id;
+  document.getElementById("modalEliminar").classList.add("active");
+}
+
+initMedicamentos();
+</script></body></html>

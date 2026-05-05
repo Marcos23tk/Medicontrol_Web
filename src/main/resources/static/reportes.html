@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reportes | Medicontrol Web</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">✚</div>
+      <h1>Medicontrol <span>Web</span></h1>
+    </div>
+    <nav class="nav">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="pacientes.html">Pacientes</a>
+      <a href="medicamentos.html">Medicamentos</a>
+      <a href="dosis.html">Dosis de hoy</a>
+      <a href="historial.html">Historial</a>
+      <a class="active" href="reportes.html">Reportes</a>
+      <a href="#" onclick="logout()">Cerrar sesión</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h2>Reportes</h2>
+        <p>Indicadores de cumplimiento del tratamiento.</p>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-light" onclick="cargarReportes()">Actualizar</button>
+        <button onclick="exportarPDF()" style="background:#1a7f5a; color:white; border:none; padding:8px 18px; border-radius:8px; cursor:pointer; font-weight:600; font-size:14px;">
+          🖨️ Exportar PDF
+        </button>
+      </div>
+    </div>
+
+    <section class="grid stats">
+      <div class="card stat">
+        <div class="icon">📋</div>
+        <h3 id="rpProgramadas">0</h3>
+        <p>Dosis programadas</p>
+      </div>
+      <div class="card stat">
+        <div class="icon">✓</div>
+        <h3 id="rpTomadas">0</h3>
+        <p>Tomadas</p>
+      </div>
+      <div class="card stat">
+        <div class="icon">!</div>
+        <h3 id="rpOmitidas">0</h3>
+        <p>Omitidas</p>
+      </div>
+      <div class="card stat">
+        <div class="icon">%</div>
+        <h3 id="rpCumplimiento">0%</h3>
+        <p>Cumplimiento</p>
+      </div>
+    </section>
+
+    <div class="card" style="margin-top:20px">
+      <h3>Semáforo de cumplimiento</h3>
+      <p id="recomendacion" style="color:#667085"></p>
+      <div class="progress">
+        <div id="rpBar" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h3>Historial de dosis</h3>
+      <table style="width:100%; border-collapse:collapse; margin-top:12px; font-size:14px;">
+        <thead>
+          <tr style="background:#f0f4f8;">
+            <th style="padding:8px; text-align:left; border-bottom:2px solid #e0e0e0;">Fecha</th>
+            <th style="padding:8px; text-align:left; border-bottom:2px solid #e0e0e0;">Hora</th>
+            <th style="padding:8px; text-align:left; border-bottom:2px solid #e0e0e0;">Paciente</th>
+            <th style="padding:8px; text-align:left; border-bottom:2px solid #e0e0e0;">Medicamento</th>
+            <th style="padding:8px; text-align:left; border-bottom:2px solid #e0e0e0;">Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tablaHistorialReporte">
+          <tr><td colspan="5" style="text-align:center; padding:20px; color:#999;">Cargando historial...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  requireLogin();
+  cargarReportes();
+
+  let historialData = [];
+
+  async function cargarReportes() {
+    const r = await api("/reportes/resumen");
+    rpProgramadas.textContent = r.dosisProgramadasHoy;
+    rpTomadas.textContent = r.dosisTomadasHoy;
+    rpOmitidas.textContent = r.dosisOmitidasHoy;
+    rpCumplimiento.textContent = r.cumplimientoHoy + "%";
+    rpBar.style.width = r.cumplimientoHoy + "%";
+    recomendacion.textContent = r.cumplimientoHoy >= 80
+      ? "Nivel verde: buen cumplimiento del tratamiento."
+      : r.cumplimientoHoy >= 50
+      ? "Nivel amarillo: cumplimiento regular, se recomienda seguimiento."
+      : "Nivel rojo: bajo cumplimiento, revisar dosis pendientes.";
+
+    const rows = await api("/dosis/historial");
+    historialData = rows;
+    const tbody = document.getElementById("tablaHistorialReporte");
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#999;">No hay registros aún.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(d => {
+      const estadoColor = d.estado === "TOMADO" ? "#1a7f5a" : d.estado === "OMITIDO" ? "#e53e3e" : "#d69e2e";
+      return `<tr>
+        <td style="padding:8px; border-bottom:1px solid #f0f0f0;">${d.fecha || "-"}</td>
+        <td style="padding:8px; border-bottom:1px solid #f0f0f0;">${d.horaProgramada || "-"}</td>
+        <td style="padding:8px; border-bottom:1px solid #f0f0f0;">${(d.medicamento?.paciente?.nombres || "") + " " + (d.medicamento?.paciente?.apellidos || "")}</td>
+        <td style="padding:8px; border-bottom:1px solid #f0f0f0;">${d.medicamento?.nombre || "-"} ${d.medicamento?.dosis || ""}</td>
+        <td style="padding:8px; border-bottom:1px solid #f0f0f0; color:${estadoColor}; font-weight:600;">${d.estado || "-"}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  async function exportarPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const hoy = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
+    const hora = new Date().toLocaleTimeString("es-PE");
+
+    doc.setFillColor(16, 100, 70);
+    doc.rect(0, 0, 210, 38, "F");
+    doc.setFillColor(26, 127, 90);
+    doc.rect(0, 10, 210, 28, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("Medicontrol Web", 36, 20);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(200, 235, 220);
+    doc.text("Sistema de control de medicamentos", 36, 28);
+    doc.setFontSize(8.5);
+    doc.text(`Generado: ${hoy}  |  ${hora}`, 196, 20, { align: "right" });
+
+    doc.setFillColor(245, 250, 247);
+    doc.rect(0, 38, 210, 14, "F");
+    doc.setTextColor(26, 127, 90);
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text("REPORTE DE CUMPLIMIENTO DEL TRATAMIENTO", 105, 47, { align: "center" });
+
+    doc.setTextColor(40, 40, 40);
+    doc.setFontSize(12);
+    doc.text("Resumen del dia", 14, 62);
+    doc.setFillColor(26, 127, 90);
+    doc.rect(14, 64, 40, 1.5, "F");
+
+    const stats = [
+      { label: "Dosis programadas", value: rpProgramadas.textContent },
+      { label: "Dosis tomadas",     value: rpTomadas.textContent },
+      { label: "Dosis omitidas",    value: rpOmitidas.textContent },
+      { label: "Cumplimiento",      value: rpCumplimiento.textContent },
+    ];
+    stats.forEach((s, i) => {
+      const col = 14 + (i % 2) * 96;
+      const row = 68 + Math.floor(i / 2) * 22;
+      doc.setFillColor(230, 230, 230);
+      doc.roundedRect(col+1, row+1, 88, 18, 3, 3, "F");
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(col, row, 88, 18, 3, 3, "F");
+      doc.setFillColor(26, 127, 90);
+      doc.rect(col, row, 3, 18, "F");
+      doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(100,100,100);
+      doc.text(s.label, col+7, row+8);
+      doc.setFontSize(15); doc.setFont("helvetica","bold"); doc.setTextColor(26,127,90);
+      doc.text(s.value, col+7, row+16);
+    });
+
+    const cumpl = parseInt(rpCumplimiento.textContent);
+    const sc = cumpl>=80?[26,127,90]:cumpl>=50?[180,130,0]:[200,50,50];
+    const sl = cumpl>=80?"NIVEL VERDE":cumpl>=50?"NIVEL AMARILLO":"NIVEL ROJO";
+    doc.setFillColor(...sc);
+    doc.roundedRect(14, 114, 182, 14, 3, 3, "F");
+    doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont("helvetica","bold");
+    doc.text(`${sl}: ${recomendacion.textContent}`, 105, 123, { align:"center" });
+
+    doc.setTextColor(40,40,40); doc.setFontSize(12); doc.setFont("helvetica","bold");
+    doc.text("Historial de dosis", 14, 138);
+    doc.setFillColor(26,127,90); doc.rect(14,140,40,1.5,"F");
+    doc.roundedRect(14,143,182,10,2,2,"F");
+    doc.setTextColor(255,255,255); doc.setFontSize(9);
+    doc.text("Fecha",18,150); doc.text("Hora",50,150); doc.text("Paciente",75,150);
+    doc.text("Medicamento",128,150); doc.text("Estado",175,150);
+
+    let y = 158;
+    doc.setFont("helvetica","normal");
+    historialData.forEach((d,i) => {
+      if(y>272){doc.addPage();y=20;}
+      if(i%2===0){doc.setFillColor(245,250,247);doc.rect(14,y-5.5,182,9,"F");}
+      const pac = ((d.medicamento?.paciente?.nombres||"")+" "+(d.medicamento?.paciente?.apellidos||"")).trim();
+      const med = (d.medicamento?.nombre||"")+" "+(d.medicamento?.dosis||"");
+      const est = d.estado||"-";
+      const ec = est==="TOMADO"?[26,127,90]:est==="OMITIDO"?[200,50,50]:[180,130,0];
+      doc.setTextColor(70,70,70); doc.setFontSize(8.5);
+      doc.text(d.fecha||"-",18,y);
+      doc.text(d.horaProgramada||"-",50,y);
+      doc.text(pac.substring(0,20),75,y);
+      doc.text(med.substring(0,22),128,y);
+      doc.setFillColor(...ec); doc.roundedRect(169,y-5,26,7,2,2,"F");
+      doc.setTextColor(255,255,255); doc.setFontSize(7); doc.setFont("helvetica","bold");
+      doc.text(est.substring(0,9),171,y);
+      doc.setFont("helvetica","normal"); y+=9;
+    });
+
+    const pc = doc.internal.getNumberOfPages();
+    for(let i=1;i<=pc;i++){
+      doc.setPage(i);
+      doc.setFillColor(245,245,245); doc.rect(0,284,210,13,"F");
+      doc.setFontSize(8); doc.setTextColor(26,127,90); doc.setFont("helvetica","bold");
+      doc.text("Medicontrol Web",14,291);
+      doc.setFont("helvetica","normal"); doc.setTextColor(130,130,130);
+      doc.text("Sistema de control de medicamentos",50,291);
+      doc.text(`Pagina ${i} de ${pc}`,196,291,{align:"right"});
+    }
+    doc.save(`reporte-medicontrol-${new Date().toISOString().slice(0,10)}.pdf`);
+  }
+</script>
+</body>
+</html>

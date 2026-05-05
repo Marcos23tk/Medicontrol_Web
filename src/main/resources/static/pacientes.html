@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pacientes | Medicontrol Web</title><link rel="stylesheet" href="css/styles.css"><style>.foto-area{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:12px}.foto-circle{width:90px;height:90px;border-radius:50%;border:3px solid #1a7f5a;background:#f0f4f8;display:flex;align-items:center;justify-content:center;font-size:36px;cursor:pointer;overflow:hidden}.foto-circle img{width:100%;height:100%;object-fit:cover;border-radius:50%}.btn-foto{background:#f0f4f8;border:1px dashed #1a7f5a;color:#1a7f5a;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}.avatar{width:36px;height:36px;border-radius:50%;border:2px solid #1a7f5a;background:#f0f4f8;font-size:16px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-right:6px;overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}#modalEliminarPac.active{display:flex!important;}</style></head><body>
+
+<div id="modalEliminarPac" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;padding:32px;max-width:380px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+    <div style="font-size:48px;margin-bottom:12px;">🗑️</div>
+    <div style="font-size:18px;font-weight:700;color:#1a1a2e;margin-bottom:8px;">¿Eliminar paciente?</div>
+    <div style="font-size:14px;color:#667085;margin-bottom:24px;">Esta acción no se puede deshacer. El paciente y sus datos serán eliminados.</div>
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button onclick="cerrarModalPac()" style="padding:10px 24px;border-radius:8px;border:1px solid #e0e0e0;background:white;color:#667085;font-weight:600;cursor:pointer;font-size:14px;">Cancelar</button>
+      <button id="btnConfirmarEliminarPac" style="padding:10px 24px;border-radius:8px;border:none;background:#e53e3e;color:white;font-weight:600;cursor:pointer;font-size:14px;">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">✚</div><h1>Medicontrol <span>Web</span></h1></div><nav class="nav"><a href="dashboard.html">Dashboard</a><a class="active" href="pacientes.html">Pacientes</a><a href="medicamentos.html">Medicamentos</a><a href="dosis.html">Dosis de hoy</a><a href="historial.html">Historial</a><a href="reportes.html">Reportes</a><a href="#" onclick="logout()">Cerrar sesión</a></nav></aside><main class="main"><div class="topbar"><div><h2>Pacientes</h2><p>Registro y búsqueda de pacientes.</p></div></div><section class="grid content-grid"><div class="card"><h3>Registrar paciente</h3><form id="pacienteForm" class="form-grid"><input type="hidden" id="pacienteId"><div class="full foto-area"><div class="foto-circle" id="fotoPreview" onclick="document.getElementById('fotoInput').click()">👤</div><button type="button" class="btn-foto" onclick="document.getElementById('fotoInput').click()">📷 Subir foto</button><input type="file" id="fotoInput" accept="image/*" style="display:none" onchange="previsualizarFoto(event)"><input type="hidden" id="fotoBase64"></div><div><label>DNI</label><input class="input" id="dni" required></div><div><label>Edad</label><input class="input" id="edad" type="number" required></div><div><label>Nombres</label><input class="input" id="nombres" required></div><div><label>Apellidos</label><input class="input" id="apellidos" required></div><div><label>Teléfono</label><input class="input" id="telefono"></div><div><label>Contacto emergencia</label><input class="input" id="contactoEmergencia"></div><div class="full"><label>Dirección</label><input class="input" id="direccion"></div><div class="full"><label>Observaciones</label><textarea id="observaciones"></textarea></div><button class="btn btn-primary full" style="text-align:center !important;display:block;width:100%;">Guardar paciente</button></form></div><div class="card"><div class="section-title"><h3>Listado</h3><input class="input" style="max-width:220px" id="buscarPaciente" placeholder="Buscar..." oninput="listarPacientes()"></div><div class="table-wrap"><table><thead><tr><th>DNI</th><th>Paciente</th><th>Teléfono</th><th></th></tr></thead><tbody id="tablaPacientes"></tbody></table></div></div></section></main></div>
+
+<script src="js/app.js"></script><script>
+requireLogin();
+
+let _pacIdEliminar = null;
+
+function previsualizarFoto(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    document.getElementById("fotoBase64").value=ev.target.result;
+    document.getElementById("fotoPreview").innerHTML=`<img src="${ev.target.result}">`;
+  };
+  r.readAsDataURL(f);
+}
+
+function getFoto(dni){return localStorage.getItem("foto_"+dni)||null;}
+function setFoto(dni,b64){if(dni&&b64)localStorage.setItem("foto_"+dni,b64);}
+
+function eliminarPaciente(id){
+  _pacIdEliminar=id;
+  document.getElementById("modalEliminarPac").classList.add("active");
+}
+
+function cerrarModalPac(){
+  _pacIdEliminar=null;
+  document.getElementById("modalEliminarPac").classList.remove("active");
+}
+
+document.getElementById("btnConfirmarEliminarPac").onclick=async function(){
+  if(!_pacIdEliminar)return;
+  await api(`/pacientes/${_pacIdEliminar}`,{method:"DELETE"});
+  cerrarModalPac();
+  toast("Paciente eliminado");
+  listarPacientes();
+};
+
+document.getElementById("modalEliminarPac").addEventListener("click",function(e){
+  if(e.target===this)cerrarModalPac();
+});
+
+async function listarPacientes(){
+  const q=document.getElementById("buscarPaciente")?.value||"";
+  const pacientes=await api(`/pacientes${q?`?q=${encodeURIComponent(q)}`:""}`);
+  tablaPacientes.innerHTML=pacientes.map(p=>{
+    const foto=getFoto(p.dni);
+    const av=foto?`<div class="avatar"><img src="${foto}"></div>`:`<div class="avatar">👤</div>`;
+    return `<tr><td>${p.dni}</td><td>${av}${p.nombres} ${p.apellidos}<br><small>${p.edad||""} años</small></td><td>${p.telefono||"-"}</td><td><button class="btn btn-sm btn-light" onclick='editarPaciente(${JSON.stringify(p)})'>Editar</button> <button class="btn btn-sm btn-danger" onclick="eliminarPaciente(${p.id})">Eliminar</button></td></tr>`;
+  }).join("");
+}
+
+function editarPaciente(p){
+  pacienteId.value=p.id;dni.value=p.dni;nombres.value=p.nombres;apellidos.value=p.apellidos;edad.value=p.edad||"";telefono.value=p.telefono||"";direccion.value=p.direccion||"";contactoEmergencia.value=p.contactoEmergencia||"";observaciones.value=p.observaciones||"";
+  const foto=getFoto(p.dni);
+  if(foto){document.getElementById("fotoBase64").value=foto;document.getElementById("fotoPreview").innerHTML=`<img src="${foto}">`;}
+  else{document.getElementById("fotoBase64").value="";document.getElementById("fotoPreview").innerHTML="👤";}
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+document.addEventListener("DOMContentLoaded",()=>{
+  initPacientes();
+});
+</script></body></html>
